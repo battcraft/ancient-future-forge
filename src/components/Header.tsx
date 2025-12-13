@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, User, MessageCircle, Menu, X } from 'lucide-react';
+import { ShoppingBag, User, Menu, X, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useShop } from '@/contexts/ShopContext';
-import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Header: React.FC = () => {
   const { cartCount, setIsCartOpen } = useShop();
+  const { user, signOut } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -19,6 +20,10 @@ const Header: React.FC = () => {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-parchment/95 backdrop-blur-sm border-b border-border">
@@ -59,11 +64,29 @@ const Header: React.FC = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            <Link to="/dashboard">
-              <Button variant="ghost" size="icon" className="text-foreground hover:text-saffron">
-                <User className="w-5 h-5" />
-              </Button>
-            </Link>
+            {user ? (
+              <>
+                <Link to="/dashboard">
+                  <Button variant="ghost" size="icon" className="text-foreground hover:text-saffron">
+                    <User className="w-5 h-5" />
+                  </Button>
+                </Link>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-foreground hover:text-saffron"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="w-5 h-5" />
+                </Button>
+              </>
+            ) : (
+              <Link to="/auth">
+                <Button variant="ghost" className="text-foreground hover:text-saffron font-display">
+                  Sign In
+                </Button>
+              </Link>
+            )}
             
             <Button 
               variant="ghost" 

@@ -1,20 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Loader2, Mic, MicOff, Brain } from 'lucide-react';
+import { Send, Sparkles, Loader2, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface Message {
   id: string;
-  role: 'user' | 'oracle';
+  role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
 }
+
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/oracle-chat`;
 
 const Oracle: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      role: 'oracle',
+      role: 'assistant',
       content: "🙏 Namaste, seeker. I am the Oracle—your guide through the labyrinth of ancient wisdom. Ask me about Yoga, Tantra, Ayurveda, or the science of consciousness. I can illuminate the path between the timeless and the modern.\n\nWhat mysteries shall we explore together?",
       timestamp: new Date(),
     },
@@ -47,27 +50,77 @@ const Oracle: React.FC = () => {
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI response (would connect to Lovable AI in production)
-    setTimeout(() => {
-      const responses = deepWisdom ? [
-        "Let us deconstruct this inquiry layer by layer...\n\n**The Surface Level**: At its most basic, your question touches upon the fundamental relationship between consciousness and matter.\n\n**The Deeper Layer**: The Vedic seers understood that vibration (Spanda) is the bridge between the unmanifest (Shiva) and manifest (Shakti) realms.\n\n**The Integration**: When we synthesize ancient understanding with modern neuroscience, we find remarkable parallels. The vagus nerve, for instance, operates as a physical correlate to the Sushumna nadi.\n\n**Practical Application**: To embody this wisdom, consider a daily practice of 10 minutes of conscious breathing, followed by silent awareness.",
-        "This is a profound question that requires careful examination...\n\n**Historical Context**: The ancient texts speak of this in symbolic language that modern seekers often misinterpret.\n\n**Scientific Correlation**: Research from institutions like Stanford and Harvard has begun to validate what the yogis knew millennia ago.\n\n**Personal Practice**: The intellectual understanding must be married to direct experience. I recommend beginning with Trataka (candle gazing) to develop the necessary concentration.",
-      ] : [
-        "The ancient texts remind us that all transformation begins with awareness. 🕯️\n\nIn practical terms, what you're describing relates to the concept of *Pratipaksha Bhavana*—the cultivation of opposite thoughts. When darkness arises, we consciously invoke light.\n\nTry this: Tomorrow morning, before rising, spend 3 breaths simply observing your mental state without judgment. This small act creates space for wisdom to emerge.",
-        "Ah, you touch upon one of the great mysteries. 🌀\n\nThe Tantric masters taught that the body is not separate from consciousness—it IS consciousness crystallized into form. Your physical practice becomes meaningful when infused with this understanding.\n\nRemember: *'Yatha pinde, tatha brahmande'*—As is the body, so is the cosmos.",
-        "What you seek is already within you, waiting to be uncovered. 💫\n\nThe Yoga Sutras tell us that the obstacles to our path are actually our greatest teachers. Each challenge is an invitation to go deeper.\n\nConsider beginning a simple journaling practice: each evening, write one insight you gained from the day's difficulties.",
-      ];
+    let assistantContent = '';
+    const assistantId = (Date.now() + 1).toString();
+
+    // Add empty assistant message that will be filled with streaming content
+    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }]);
+
+    try {
+      const apiMessages = messages
+        .filter(m => m.id !== '1') // Skip initial greeting
+        .map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
       
-      const oracleMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'oracle',
-        content: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date(),
-      };
-      
-      setMessages(prev => [...prev, oracleMessage]);
+      apiMessages.push({ role: 'user', content: input.trim() });
+
+      const resp = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ messages: apiMessages, isDeepWisdom: deepWisdom }),
+      });
+
+      if (!resp.ok || !resp.body) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to connect to the Oracle');
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (line.startsWith(':') || line.trim() === '') continue;
+          if (!line.startsWith('data: ')) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              assistantContent += content;
+              setMessages(prev =>
+                prev.map(m => (m.id === assistantId ? { ...m, content: assistantContent } : m))
+              );
+            }
+          } catch {
+            textBuffer = line + '\n' + textBuffer;
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Oracle error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to consult the Oracle');
+      // Remove the empty assistant message on error
+      setMessages(prev => prev.filter(m => m.id !== assistantId));
+    } finally {
       setIsLoading(false);
-    }, deepWisdom ? 3000 : 1500);
+    }
   };
 
   const suggestedQuestions = [
@@ -136,11 +189,11 @@ const Oracle: React.FC = () => {
               {/* Avatar */}
               <div className={cn(
                 "w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center",
-                message.role === 'oracle' 
+                message.role === 'assistant' 
                   ? "bg-cosmic" 
                   : "bg-saffron"
               )}>
-                {message.role === 'oracle' ? (
+                {message.role === 'assistant' ? (
                   <Sparkles className="w-5 h-5 text-saffron" />
                 ) : (
                   <span className="text-primary-foreground font-display text-sm">Y</span>
@@ -154,7 +207,7 @@ const Oracle: React.FC = () => {
               )}>
                 <div className={cn(
                   "inline-block p-4 rounded-2xl",
-                  message.role === 'oracle'
+                  message.role === 'assistant'
                     ? "bg-card border border-border text-left rounded-tl-none"
                     : "bg-primary text-primary-foreground text-left rounded-tr-none"
                 )}>
@@ -169,7 +222,7 @@ const Oracle: React.FC = () => {
             </div>
           ))}
 
-          {isLoading && (
+          {isLoading && messages[messages.length - 1]?.content === '' && (
             <div className="flex gap-4">
               <div className="w-10 h-10 rounded-full bg-cosmic flex-shrink-0 flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-saffron animate-pulse" />
