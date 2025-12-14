@@ -1,14 +1,27 @@
 import React, { useState } from 'react';
 import ProductCard from '@/components/ProductCard';
-import { products } from '@/data/products';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 type ProductType = 'all' | 'physical' | 'digital';
 
 const Bazaar: React.FC = () => {
   const [activeType, setActiveType] = useState<ProductType>('all');
+
+  const { data: products = [], isLoading } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_published', true);
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const filteredProducts = activeType === 'all' 
     ? products 
@@ -73,15 +86,23 @@ const Bazaar: React.FC = () => {
       {/* Products */}
       <section className="py-16">
         <div className="container mx-auto px-4">
-          <p className="text-muted-foreground mb-8">
-            {filteredProducts.length} product{filteredProducts.length !== 1 && 's'} available
-          </p>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-saffron" />
+            </div>
+          ) : (
+            <>
+              <p className="text-muted-foreground mb-8">
+                {filteredProducts.length} product{filteredProducts.length !== 1 && 's'} available
+              </p>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
 

@@ -1,27 +1,86 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { BookOpen, FileText, Clock, ArrowRight, Trophy } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { BookOpen, FileText, Clock, ArrowRight, Trophy, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DailyKraft from '@/components/DailyKraft';
-import { courses } from '@/data/courses';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 const Dashboard: React.FC = () => {
-  // Simulated user data
-  const user = {
-    name: 'Sadhaka',
-    enrolledCourses: [courses[0], courses[2]],
-    minutesPracticed: 847,
-    articlesRead: 23,
-    streak: 12,
-  };
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
 
-  // Get time-based greeting
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
+
+  const { data: profile } = useQuery({
+    queryKey: ['profile', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const { data: enrollments = [], isLoading: loadingEnrollments } = useQuery({
+    queryKey: ['enrollments', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+          *,
+          course:courses(*)
+        `)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const { data: dailyKraftCount = 0 } = useQuery({
+    queryKey: ['daily-kraft-count', user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const { count, error } = await supabase
+        .from('daily_kraft_log')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!user,
+  });
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good Morning';
     if (hour < 17) return 'Good Afternoon';
     return 'Good Evening';
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen pt-20 bg-parchment flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-saffron" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const userName = profile?.full_name || user.email?.split('@')[0] || 'Sadhaka';
 
   return (
     <div className="min-h-screen pt-20 bg-parchment">
@@ -34,7 +93,7 @@ const Dashboard: React.FC = () => {
                 {getGreeting()}
               </p>
               <h1 className="font-display text-3xl md:text-4xl text-parchment">
-                Welcome back, {user.name}
+                Welcome back, {userName}
               </h1>
             </div>
             
@@ -44,8 +103,8 @@ const Dashboard: React.FC = () => {
                 <Trophy className="w-5 h-5 text-primary-foreground" />
               </div>
               <div>
-                <p className="text-parchment font-display text-xl">{user.streak} Days</p>
-                <p className="text-parchment/60 text-xs">Practice Streak</p>
+                <p className="text-parchment font-display text-xl">{dailyKraftCount} Completions</p>
+                <p className="text-parchment/60 text-xs">Daily Kraft Tasks</p>
               </div>
             </div>
           </div>
@@ -61,12 +120,12 @@ const Dashboard: React.FC = () => {
               <div className="bg-card rounded-xl border border-border p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-lg bg-saffron/10 flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-saffron" />
+                    <BookOpen className="w-5 h-5 text-saffron" />
                   </div>
-                  <span className="text-muted-foreground text-sm">Minutes Practiced</span>
+                  <span className="text-muted-foreground text-sm">Enrolled Courses</span>
                 </div>
-                <p className="font-display text-4xl text-foreground">{user.minutesPracticed}</p>
-                <p className="text-sm text-muted-foreground mt-1">+47 this week</p>
+                <p className="font-display text-4xl text-foreground">{enrollments.length}</p>
+                <p className="text-sm text-muted-foreground mt-1">Active learning</p>
               </div>
               
               <div className="bg-card rounded-xl border border-border p-6">
@@ -74,10 +133,10 @@ const Dashboard: React.FC = () => {
                   <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
                     <FileText className="w-5 h-5 text-purple-600" />
                   </div>
-                  <span className="text-muted-foreground text-sm">Articles Read</span>
+                  <span className="text-muted-foreground text-sm">Daily Kraft</span>
                 </div>
-                <p className="font-display text-4xl text-foreground">{user.articlesRead}</p>
-                <p className="text-sm text-muted-foreground mt-1">+3 this week</p>
+                <p className="font-display text-4xl text-foreground">{dailyKraftCount}</p>
+                <p className="text-sm text-muted-foreground mt-1">Tasks completed</p>
               </div>
             </div>
 
@@ -90,26 +149,33 @@ const Dashboard: React.FC = () => {
                 </Link>
               </div>
 
-              {user.enrolledCourses.length > 0 ? (
+              {loadingEnrollments ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-saffron" />
+                </div>
+              ) : enrollments.length > 0 ? (
                 <div className="space-y-4">
-                  {user.enrolledCourses.map((course, index) => (
-                    <div 
-                      key={course.id}
+                  {enrollments.map((enrollment) => (
+                    <Link
+                      key={enrollment.id}
+                      to={`/academy/${enrollment.course_id}`}
                       className="flex gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                     >
-                      <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-                        <img 
-                          src={course.image} 
-                          alt={course.title}
-                          className="w-full h-full object-cover"
-                        />
+                      <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                        {enrollment.course?.image_url && (
+                          <img 
+                            src={enrollment.course.image_url} 
+                            alt={enrollment.course.title}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-display text-foreground mb-1 truncate">
-                          {course.title}
+                          {enrollment.course?.title}
                         </h3>
                         <p className="text-sm text-muted-foreground mb-3">
-                          {course.instructor}
+                          {enrollment.course?.instructor}
                         </p>
                         
                         {/* Progress Bar */}
@@ -117,18 +183,18 @@ const Dashboard: React.FC = () => {
                           <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
                             <div 
                               className="h-full bg-saffron rounded-full transition-all"
-                              style={{ width: `${(index + 1) * 30}%` }}
+                              style={{ width: `${enrollment.progress || 0}%` }}
                             />
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {(index + 1) * 30}%
+                            {enrollment.progress || 0}%
                           </span>
                         </div>
                       </div>
                       <Button variant="ghost" size="icon" className="flex-shrink-0">
                         <ArrowRight className="w-4 h-4" />
                       </Button>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               ) : (

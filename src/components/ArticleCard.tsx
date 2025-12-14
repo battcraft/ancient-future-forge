@@ -3,17 +3,19 @@ import { Link } from 'react-router-dom';
 import { Clock, ArrowRight } from 'lucide-react';
 import { TrinityPath } from './TrinityNav';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 
 export interface Article {
   id: string;
   title: string;
   excerpt: string;
   author: string;
-  date: string;
-  readTime: string;
+  published_at?: string | null;
+  read_time: string;
   path: TrinityPath;
-  image: string;
-  featured?: boolean;
+  image?: string;
+  image_url?: string | null;
+  is_featured?: boolean | null;
 }
 
 interface ArticleCardProps {
@@ -28,6 +30,14 @@ const pathLabels: Record<string, string> = {
 };
 
 const ArticleCard: React.FC<ArticleCardProps> = ({ article, variant = 'default' }) => {
+  // Support both image and image_url
+  const imageUrl = article.image_url || article.image || '/placeholder.svg';
+  
+  // Format date
+  const formattedDate = article.published_at 
+    ? format(new Date(article.published_at), 'MMM d, yyyy')
+    : '';
+
   if (variant === 'featured') {
     return (
       <Link 
@@ -35,7 +45,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, variant = 'default' 
         className="group relative block aspect-[16/9] md:aspect-[21/9] rounded-2xl overflow-hidden"
       >
         <img 
-          src={article.image} 
+          src={imageUrl} 
           alt={article.title}
           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
         />
@@ -62,11 +72,11 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, variant = 'default' 
           <div className="flex items-center gap-4 text-parchment/60 text-sm">
             <span>By {article.author}</span>
             <span>•</span>
-            <span>{article.date}</span>
+            <span>{formattedDate}</span>
             <span>•</span>
             <div className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
-              {article.readTime}
+              {article.read_time}
             </div>
           </div>
         </div>
@@ -86,7 +96,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, variant = 'default' 
     >
       <div className="aspect-[16/10] overflow-hidden">
         <img 
-          src={article.image} 
+          src={imageUrl} 
           alt={article.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
@@ -98,7 +108,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, variant = 'default' 
             {pathLabels[article.path]}
           </span>
           <span className="text-muted-foreground">•</span>
-          <span className="text-xs text-muted-foreground">{article.readTime}</span>
+          <span className="text-xs text-muted-foreground">{article.read_time}</span>
         </div>
         
         <h3 className="font-display text-lg text-foreground mb-2 group-hover:text-saffron transition-colors line-clamp-2">
@@ -111,7 +121,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article, variant = 'default' 
         
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{article.author}</span>
-          <span>{article.date}</span>
+          <span>{formattedDate}</span>
         </div>
       </div>
     </Link>

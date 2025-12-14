@@ -1,15 +1,29 @@
 import React, { useState } from 'react';
 import TrinityNav, { TrinityPath } from '@/components/TrinityNav';
 import CourseCard from '@/components/CourseCard';
-import { courses } from '@/data/courses';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
 
 type Level = 'all' | 'initiate' | 'adept' | 'master';
 
 const Academy: React.FC = () => {
   const [activePath, setActivePath] = useState<TrinityPath>('all');
   const [activeLevel, setActiveLevel] = useState<Level>('all');
+
+  const { data: courses = [], isLoading } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('is_published', true);
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const filteredCourses = courses.filter(course => {
     const pathMatch = activePath === 'all' || course.path === activePath;
@@ -71,7 +85,11 @@ const Academy: React.FC = () => {
       {/* Course Grid */}
       <section className="py-16">
         <div className="container mx-auto px-4">
-          {filteredCourses.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-saffron" />
+            </div>
+          ) : filteredCourses.length > 0 ? (
             <>
               <p className="text-muted-foreground mb-8">
                 Showing {filteredCourses.length} course{filteredCourses.length !== 1 && 's'}
