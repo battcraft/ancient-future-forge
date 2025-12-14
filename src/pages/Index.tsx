@@ -1,15 +1,42 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, BookOpen, ShoppingBag, MessageCircle } from 'lucide-react';
+import { ArrowRight, Sparkles, BookOpen, ShoppingBag, MessageCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import TrinityNav, { TrinityPath } from '@/components/TrinityNav';
 import CourseCard from '@/components/CourseCard';
 import ArticleCard from '@/components/ArticleCard';
-import { courses } from '@/data/courses';
-import { articles } from '@/data/articles';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 const Index: React.FC = () => {
   const [activePath, setActivePath] = useState<TrinityPath>('all');
+
+  const { data: courses = [], isLoading: loadingCourses } = useQuery({
+    queryKey: ['featured-courses'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('is_published', true)
+        .limit(6);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: articles = [], isLoading: loadingArticles } = useQuery({
+    queryKey: ['featured-articles'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('articles')
+        .select('*')
+        .eq('is_published', true)
+        .order('published_at', { ascending: false })
+        .limit(6);
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const filteredCourses = activePath === 'all' 
     ? courses.slice(0, 3) 
@@ -132,11 +159,17 @@ const Index: React.FC = () => {
             </Link>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCourses.map((course) => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
+          {loadingCourses ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-saffron" />
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredCourses.map((course) => (
+                <CourseCard key={course.id} course={course} />
+              ))}
+            </div>
+          )}
 
           <Link to="/academy" className="sm:hidden flex items-center justify-center gap-2 mt-8 text-foreground hover:text-saffron transition-colors">
             <span className="font-display">View All Courses</span>
@@ -163,19 +196,27 @@ const Index: React.FC = () => {
             </Link>
           </div>
 
-          {/* Featured Article */}
-          {featuredArticle && (
-            <div className="mb-8">
-              <ArticleCard article={featuredArticle} variant="featured" />
+          {loadingArticles ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-saffron" />
             </div>
-          )}
+          ) : (
+            <>
+              {/* Featured Article */}
+              {featuredArticle && (
+                <div className="mb-8">
+                  <ArticleCard article={featuredArticle} variant="featured" />
+                </div>
+              )}
 
-          {/* Other Articles */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {otherArticles.map((article) => (
-              <ArticleCard key={article.id} article={article} />
-            ))}
-          </div>
+              {/* Other Articles */}
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {otherArticles.map((article) => (
+                  <ArticleCard key={article.id} article={article} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
 

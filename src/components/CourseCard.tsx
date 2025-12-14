@@ -13,11 +13,13 @@ export interface Course {
   instructor: string;
   price: number;
   duration: string;
-  students: number;
-  rating: number;
+  students?: number;
+  rating?: number;
+  lessons_count?: number;
   level: 'initiate' | 'adept' | 'master';
   path: TrinityPath;
-  image: string;
+  image?: string;
+  image_url?: string | null;
 }
 
 interface CourseCardProps {
@@ -39,13 +41,16 @@ const levelColors: Record<string, string> = {
 const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
   const { addToCart, cart } = useShop();
   const isInCart = cart.some(item => item.id === course.id);
+  
+  // Support both image and image_url
+  const imageUrl = course.image_url || course.image || '/placeholder.svg';
 
   return (
     <div className="group bg-card rounded-xl border border-border overflow-hidden hover:shadow-lg hover:border-saffron/50 transition-all duration-300">
       {/* Image */}
       <div className="relative aspect-video overflow-hidden">
         <img 
-          src={course.image} 
+          src={imageUrl} 
           alt={course.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
@@ -89,14 +94,18 @@ const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
             <Clock className="w-3.5 h-3.5" />
             {course.duration}
           </div>
-          <div className="flex items-center gap-1">
-            <Users className="w-3.5 h-3.5" />
-            {course.students.toLocaleString()}
-          </div>
-          <div className="flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 fill-saffron text-saffron" />
-            {course.rating}
-          </div>
+          {course.lessons_count && (
+            <div className="flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" />
+              {course.lessons_count} lessons
+            </div>
+          )}
+          {course.rating && (
+            <div className="flex items-center gap-1">
+              <Star className="w-3.5 h-3.5 fill-saffron text-saffron" />
+              {course.rating}
+            </div>
+          )}
         </div>
 
         {/* Action */}
@@ -108,7 +117,7 @@ const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
             title: course.title,
             price: course.price,
             type: 'course',
-            image: course.image,
+            image: imageUrl,
           })}
           disabled={isInCart}
         >

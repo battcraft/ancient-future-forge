@@ -1,10 +1,25 @@
 import React, { useState } from 'react';
 import TrinityNav, { TrinityPath } from '@/components/TrinityNav';
 import ArticleCard from '@/components/ArticleCard';
-import { articles } from '@/data/articles';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
 
 const Journal: React.FC = () => {
   const [activePath, setActivePath] = useState<TrinityPath>('all');
+
+  const { data: articles = [], isLoading } = useQuery({
+    queryKey: ['articles'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('articles')
+        .select('*')
+        .eq('is_published', true)
+        .order('published_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const filteredArticles = activePath === 'all' 
     ? articles 
@@ -41,22 +56,30 @@ const Journal: React.FC = () => {
       {/* Articles */}
       <section className="py-16">
         <div className="container mx-auto px-4">
-          <p className="text-muted-foreground mb-8">
-            {filteredArticles.length} article{filteredArticles.length !== 1 && 's'} in The Decoder
-          </p>
-
-          {featuredArticle && (
-            <div className="mb-12">
-              <ArticleCard article={featuredArticle} variant="featured" />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-saffron" />
             </div>
-          )}
+          ) : (
+            <>
+              <p className="text-muted-foreground mb-8">
+                {filteredArticles.length} article{filteredArticles.length !== 1 && 's'} in The Decoder
+              </p>
 
-          {otherArticles.length > 0 && (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {otherArticles.map((article) => (
-                <ArticleCard key={article.id} article={article} />
-              ))}
-            </div>
+              {featuredArticle && (
+                <div className="mb-12">
+                  <ArticleCard article={featuredArticle} variant="featured" />
+                </div>
+              )}
+
+              {otherArticles.length > 0 && (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {otherArticles.map((article) => (
+                    <ArticleCard key={article.id} article={article} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>

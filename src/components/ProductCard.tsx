@@ -9,12 +9,10 @@ export interface Product {
   title: string;
   description: string;
   price: number;
-  originalPrice?: number;
-  rating: number;
-  reviews: number;
   type: 'physical' | 'digital';
-  image: string;
-  badge?: string;
+  image?: string;
+  image_url?: string | null;
+  in_stock?: boolean | null;
 }
 
 interface ProductCardProps {
@@ -24,33 +22,19 @@ interface ProductCardProps {
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { addToCart, cart } = useShop();
   const isInCart = cart.some(item => item.id === product.id);
-  const discount = product.originalPrice 
-    ? Math.round((1 - product.price / product.originalPrice) * 100) 
-    : 0;
+  
+  // Support both image and image_url
+  const imageUrl = product.image_url || product.image || '/placeholder.svg';
 
   return (
     <div className="group bg-card rounded-xl border border-border overflow-hidden hover:shadow-lg hover:border-saffron/50 transition-all duration-300">
       {/* Image */}
       <div className="relative aspect-square overflow-hidden bg-muted">
         <img 
-          src={product.image} 
+          src={imageUrl} 
           alt={product.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        
-        {/* Badges */}
-        <div className="absolute top-3 left-3 flex flex-col gap-2">
-          {product.badge && (
-            <span className="px-2 py-1 bg-saffron text-primary-foreground text-xs font-medium rounded-full">
-              {product.badge}
-            </span>
-          )}
-          {discount > 0 && (
-            <span className="px-2 py-1 bg-destructive text-destructive-foreground text-xs font-medium rounded-full">
-              -{discount}%
-            </span>
-          )}
-        </div>
         
         {/* Type Badge */}
         <div className="absolute top-3 right-3">
@@ -63,6 +47,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             {product.type}
           </span>
         </div>
+        
+        {/* Out of stock overlay */}
+        {product.in_stock === false && (
+          <div className="absolute inset-0 bg-charcoal/60 flex items-center justify-center">
+            <span className="text-parchment font-display">Out of Stock</span>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -75,34 +66,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {product.description}
         </p>
 
-        {/* Rating */}
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex items-center gap-0.5">
-            {[...Array(5)].map((_, i) => (
-              <Star 
-                key={i} 
-                className={cn(
-                  "w-3.5 h-3.5",
-                  i < Math.floor(product.rating) 
-                    ? "fill-saffron text-saffron" 
-                    : "fill-muted text-muted"
-                )} 
-              />
-            ))}
-          </div>
-          <span className="text-xs text-muted-foreground">
-            ({product.reviews})
-          </span>
-        </div>
-
         {/* Price */}
         <div className="flex items-baseline gap-2 mb-4">
           <span className="font-display text-2xl text-saffron">${product.price}</span>
-          {product.originalPrice && (
-            <span className="text-sm text-muted-foreground line-through">
-              ${product.originalPrice}
-            </span>
-          )}
         </div>
 
         {/* Action */}
@@ -114,11 +80,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             title: product.title,
             price: product.price,
             type: 'product',
-            image: product.image,
+            image: imageUrl,
           })}
-          disabled={isInCart}
+          disabled={isInCart || product.in_stock === false}
         >
-          {isInCart ? 'In Cart' : 'Add to Cart'}
+          {product.in_stock === false ? 'Out of Stock' : isInCart ? 'In Cart' : 'Add to Cart'}
         </Button>
         
         {/* Guarantee */}

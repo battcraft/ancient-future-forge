@@ -2,25 +2,85 @@ import React, { useState } from 'react';
 import { X, Plus, Minus, ShoppingBag, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useShop } from '@/contexts/ShopContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 const CartDrawer: React.FC = () => {
   const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateQuantity, cartTotal, clearCart } = useShop();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutComplete, setCheckoutComplete] = useState(false);
 
   const handleCheckout = async () => {
-    setIsCheckingOut(true);
-    // Simulate checkout process
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsCheckingOut(false);
-    setCheckoutComplete(true);
-    
-    setTimeout(() => {
-      clearCart();
-      setCheckoutComplete(false);
+    if (!user) {
+      toast.error('Please sign in to complete your purchase');
       setIsCartOpen(false);
-    }, 2000);
+      navigate('/auth');
+      return;
+    }
+
+    setIsCheckingOut(true);
+
+    try {
+      // Create order
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          user_id: user.id,
+          total: cartTotal,
+          status: 'completed',
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create order items
+      const orderItems = cart.map(item => ({
+        order_id: order.id,
+        item_id: item.id,
+        item_type: item.type,
+        item_title: item.title,
+        quantity: item.quantity,
+        price: item.price,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // Create enrollments for courses
+      const courseItems = cart.filter(item => item.type === 'course');
+      if (courseItems.length > 0) {
+        const enrollments = courseItems.map(item => ({
+          user_id: user.id,
+          course_id: item.id,
+          progress: 0,
+        }));
+
+        await supabase.from('enrollments').insert(enrollments);
+      }
+
+      setCheckoutComplete(true);
+      toast.success('Purchase complete! Thank you for your order.');
+
+      setTimeout(() => {
+        clearCart();
+        setCheckoutComplete(false);
+        setIsCartOpen(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast.error('Checkout failed. Please try again.');
+    } finally {
+      setIsCheckingOut(false);
+    }
   };
 
   if (!isCartOpen) return null;

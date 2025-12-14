@@ -3,6 +3,8 @@ import { Send, Sparkles, Loader2, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
   id: string;
@@ -13,18 +15,20 @@ interface Message {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/oracle-chat`;
 
+const INITIAL_MESSAGE: Message = {
+  id: '1',
+  role: 'assistant',
+  content: "🙏 Namaste, seeker. I am the Oracle—your guide through the labyrinth of ancient wisdom. Ask me about Yoga, Tantra, Ayurveda, or the science of consciousness. I can illuminate the path between the timeless and the modern.\n\nWhat mysteries shall we explore together?",
+  timestamp: new Date(),
+};
+
 const Oracle: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: "🙏 Namaste, seeker. I am the Oracle—your guide through the labyrinth of ancient wisdom. Ask me about Yoga, Tantra, Ayurveda, or the science of consciousness. I can illuminate the path between the timeless and the modern.\n\nWhat mysteries shall we explore together?",
-      timestamp: new Date(),
-    },
-  ]);
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [deepWisdom, setDeepWisdom] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -34,6 +38,73 @@ const Oracle: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load or create conversation for logged-in users
+  useEffect(() => {
+    const loadConversation = async () => {
+      if (!user) return;
+      
+      // Try to find an existing conversation from today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data: existing } = await supabase
+        .from('oracle_conversations')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('created_at', today.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (existing) {
+        setConversationId(existing.id);
+        const savedMessages = existing.messages as Array<{ role: string; content: string; timestamp: string }>;
+        if (savedMessages && savedMessages.length > 0) {
+          setMessages(savedMessages.map((m, i) => ({
+            id: String(i + 1),
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            timestamp: new Date(m.timestamp),
+          })));
+        }
+        setDeepWisdom(existing.is_deep_wisdom || false);
+      }
+    };
+    
+    loadConversation();
+  }, [user]);
+
+  const saveConversation = async (newMessages: Message[]) => {
+    if (!user) return;
+    
+    const messagesForDb = newMessages.map(m => ({
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp.toISOString(),
+    }));
+    
+    if (conversationId) {
+      await supabase
+        .from('oracle_conversations')
+        .update({ messages: messagesForDb, is_deep_wisdom: deepWisdom })
+        .eq('id', conversationId);
+    } else {
+      const { data } = await supabase
+        .from('oracle_conversations')
+        .insert({
+          user_id: user.id,
+          messages: messagesForDb,
+          is_deep_wisdom: deepWisdom,
+        })
+        .select()
+        .single();
+      
+      if (data) {
+        setConversationId(data.id);
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +117,8 @@ const Oracle: React.FC = () => {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
 
@@ -113,6 +185,10 @@ const Oracle: React.FC = () => {
           }
         }
       }
+
+      // Save conversation after getting response
+      const finalMessages = [...updatedMessages, { id: assistantId, role: 'assistant' as const, content: assistantContent, timestamp: new Date() }];
+      await saveConversation(finalMessages);
     } catch (error) {
       console.error('Oracle error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to consult the Oracle');

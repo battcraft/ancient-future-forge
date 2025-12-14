@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, RefreshCw, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const dailyTasks = [
   { task: "Sit in complete silence for 3 minutes", category: "Flow" },
@@ -17,9 +20,11 @@ const dailyTasks = [
 ];
 
 const DailyKraft: React.FC = () => {
+  const { user } = useAuth();
   const [currentTask, setCurrentTask] = useState(dailyTasks[0]);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     // Get today's date as seed for consistent daily task
@@ -29,15 +34,55 @@ const DailyKraft: React.FC = () => {
     setCurrentTask(dailyTasks[index]);
     
     // Check if already completed today
-    const completedDate = localStorage.getItem('dailyKraftCompleted');
-    if (completedDate === today) {
-      setIsCompleted(true);
-    }
-  }, []);
+    const checkCompletion = async () => {
+      if (user) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        
+        const { data } = await supabase
+          .from('daily_kraft_log')
+          .select('id')
+          .eq('user_id', user.id)
+          .gte('completed_at', todayStart.toISOString())
+          .limit(1)
+          .maybeSingle();
+        
+        if (data) {
+          setIsCompleted(true);
+        }
+      } else {
+        // Fallback to localStorage for non-logged in users
+        const completedDate = localStorage.getItem('dailyKraftCompleted');
+        if (completedDate === today) {
+          setIsCompleted(true);
+        }
+      }
+    };
+    
+    checkCompletion();
+  }, [user]);
 
-  const handleComplete = () => {
-    setIsCompleted(true);
-    localStorage.setItem('dailyKraftCompleted', new Date().toDateString());
+  const handleComplete = async () => {
+    setIsLoading(true);
+    
+    try {
+      if (user) {
+        await supabase.from('daily_kraft_log').insert({
+          user_id: user.id,
+          task: currentTask.task,
+        });
+      } else {
+        localStorage.setItem('dailyKraftCompleted', new Date().toDateString());
+      }
+      
+      setIsCompleted(true);
+      toast.success('Daily Kraft completed! 🙏');
+    } catch (error) {
+      console.error('Error saving completion:', error);
+      toast.error('Failed to save completion');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRefresh = () => {
@@ -101,13 +146,15 @@ const DailyKraft: React.FC = () => {
           variant={isCompleted ? "parchment" : "saffron"}
           className="w-full"
           onClick={handleComplete}
-          disabled={isCompleted}
+          disabled={isCompleted || isLoading}
         >
           {isCompleted ? (
             <>
               <Check className="w-4 h-4" />
               Completed Today
             </>
+          ) : isLoading ? (
+            'Saving...'
           ) : (
             'Mark as Complete'
           )}
