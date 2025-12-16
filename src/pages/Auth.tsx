@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +14,7 @@ const passwordSchema = z.string().min(6, 'Password must be at least 6 characters
 const nameSchema = z.string().min(2, 'Name must be at least 2 characters');
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -38,12 +39,14 @@ export default function Auth() {
       newErrors.email = emailResult.error.errors[0].message;
     }
     
-    const passwordResult = passwordSchema.safeParse(password);
-    if (!passwordResult.success) {
-      newErrors.password = passwordResult.error.errors[0].message;
+    if (mode !== 'reset') {
+      const passwordResult = passwordSchema.safeParse(password);
+      if (!passwordResult.success) {
+        newErrors.password = passwordResult.error.errors[0].message;
+      }
     }
     
-    if (!isLogin) {
+    if (mode === 'signup') {
       const nameResult = nameSchema.safeParse(fullName);
       if (!nameResult.success) {
         newErrors.name = nameResult.error.errors[0].message;
@@ -62,7 +65,17 @@ export default function Auth() {
     setIsLoading(true);
 
     try {
-      if (isLogin) {
+      if (mode === 'reset') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth`,
+        });
+        if (error) {
+          toast.error(error.message);
+        } else {
+          toast.success('Password reset email sent! Check your inbox.');
+          setMode('login');
+        }
+      } else if (mode === 'login') {
         const { error } = await signIn(email, password);
         if (error) {
           if (error.message.includes('Invalid login credentials')) {
@@ -94,14 +107,12 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen bg-parchment flex items-center justify-center p-4 paper-texture">
-      {/* Decorative background */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-20 left-10 w-64 h-64 bg-saffron/5 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-cosmic/5 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-md relative">
-        {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-cosmic mb-4">
             <Sparkles className="w-8 h-8 text-saffron" />
@@ -110,14 +121,13 @@ export default function Auth() {
           <p className="text-charcoal/60">Enter the Digital Ashram</p>
         </div>
 
-        {/* Auth Card */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-elegant border border-charcoal/5 p-8">
           <h2 className="font-heading text-2xl text-charcoal text-center mb-6">
-            {isLogin ? 'Welcome Back' : 'Begin Your Journey'}
+            {mode === 'login' ? 'Welcome Back' : mode === 'signup' ? 'Begin Your Journey' : 'Reset Password'}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {!isLogin && (
+            {mode === 'signup' && (
               <div className="space-y-2">
                 <Label htmlFor="fullName" className="text-charcoal/80">Full Name</Label>
                 <Input
@@ -145,27 +155,39 @@ export default function Auth() {
               {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-charcoal/80">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Your secret mantra"
-                  className="bg-parchment/50 border-charcoal/10 focus:border-saffron pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-charcoal/60"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            {mode !== 'reset' && (
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-charcoal/80">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Your secret mantra"
+                    className="bg-parchment/50 border-charcoal/10 focus:border-saffron pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-charcoal/60"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
               </div>
-              {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-            </div>
+            )}
+
+            {mode === 'login' && (
+              <button
+                type="button"
+                onClick={() => { setMode('reset'); setErrors({}); }}
+                className="text-saffron hover:text-saffron-dark text-sm"
+              >
+                Forgot password?
+              </button>
+            )}
 
             <Button
               type="submit"
@@ -175,28 +197,33 @@ export default function Auth() {
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {isLogin ? 'Entering...' : 'Creating...'}
+                  {mode === 'login' ? 'Entering...' : mode === 'signup' ? 'Creating...' : 'Sending...'}
                 </span>
               ) : (
-                isLogin ? 'Enter the Ashram' : 'Begin Journey'
+                mode === 'login' ? 'Enter the Ashram' : mode === 'signup' ? 'Begin Journey' : 'Send Reset Link'
               )}
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setErrors({});
-              }}
-              className="text-saffron hover:text-saffron-dark transition-colors text-sm"
-            >
-              {isLogin ? "New seeker? Create an account" : "Already a member? Sign in"}
-            </button>
+          <div className="mt-6 text-center space-y-2">
+            {mode === 'reset' ? (
+              <button
+                onClick={() => { setMode('login'); setErrors({}); }}
+                className="text-saffron hover:text-saffron-dark transition-colors text-sm"
+              >
+                Back to login
+              </button>
+            ) : (
+              <button
+                onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setErrors({}); }}
+                className="text-saffron hover:text-saffron-dark transition-colors text-sm"
+              >
+                {mode === 'login' ? "New seeker? Create an account" : "Already a member? Sign in"}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-charcoal/40 text-sm mt-6">
           By entering, you accept the ancient wisdom of the tradition
         </p>
