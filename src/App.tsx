@@ -14,6 +14,7 @@ import Bazaar from "./pages/Bazaar";
 import Dashboard from "./pages/Dashboard";
 import Oracle from "./pages/Oracle";
 import Auth from "./pages/Auth";
+import Settings from "./pages/Settings";
 import CourseDetail from "./pages/CourseDetail";
 import ArticleDetail from "./pages/ArticleDetail";
 import NotFound from "./pages/NotFound";
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/bazaar" element={<Bazaar />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/oracle" element={<Oracle />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
